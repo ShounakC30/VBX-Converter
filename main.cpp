@@ -14,6 +14,7 @@ void write(std::ofstream &f, T data) {
     f.write(reinterpret_cast<const char *>(&data), sizeof(data));
 }
 
+
 int main(int argc, char **argv) {
     if (argc == 1) {
         std::cerr << "Error: Too few arguments" << std::endl;
@@ -59,7 +60,11 @@ int main(int argc, char **argv) {
     auto bbox = grid->evalActiveVoxelBoundingBox();
 
     auto ws_min = grid->indexToWorld(bbox.min());
-    auto ws_max = grid->indexToWorld(bbox.max() - openvdb::Vec3R(1, 1, 1));
+    auto ws_max = grid->indexToWorld(bbox.max());// - openvdb::Vec3R(1, 1, 1));
+
+    // auto ws_min = bbox.min();
+    // auto ws_max = bbox.max();// - openvdb::Vec3R(1, 1, 1);
+
     openvdb::tools::GridSampler<openvdb::FloatGrid, openvdb::tools::BoxSampler> sampler(*grid);
     // Compute the value of the grid at fractional coordinates in index space.
 
@@ -72,9 +77,11 @@ int main(int argc, char **argv) {
             }
         }
     }
-    std::string output_filename = filename.substr(0, filename.find_last_of('.')) + ".vol";
+    std::string output_filename = filename.substr(0, filename.find_last_of('.')) + ".raw";
+    std::string output_header = filename.substr(0, filename.find_last_of('.')) + ".mhd";
     if (outputformat == "ascii") {
         std::ofstream output_file(output_filename);
+        std::ofstream header(output_header);
         if (!output_file.is_open()) {
             std::cout << "Could not open output file!\n";
             return -1;
@@ -88,43 +95,29 @@ int main(int argc, char **argv) {
         output_file.close();
     } else if (outputformat == "binary") {
         std::ofstream output_file(output_filename, std::ios::binary);
+        std::ofstream header(output_header, std::ios::binary);
         if (!output_file.is_open()) {
             std::cout << "Could not open output file!\n";
             return -1;
         }
-        output_file << 'V';
-        output_file << 'O';
-        output_file << 'L';
-        uint8_t version = 3;
-        write(output_file, version);
+        header<<"ObjectType = Image\n";
+        header<<"NDims = 3\n";
+        header<<"DimSize = "<<bbox_dim.x()-1<<" "<< bbox_dim.y()-1 <<" "<<bbox_dim.z()-1<<"\n";
 
-        write(output_file, (int32_t) 1); // type
-        write(output_file, (int32_t)bbox_dim.x() - 1);
-        write(output_file, (int32_t)bbox_dim.y() - 1);
-        write(output_file, (int32_t)bbox_dim.z() - 1);
-        write(output_file, (int32_t) 1); // #n channels
-
-        float xmin = ws_min.x();
-        float ymin = ws_min.y();
-        float zmin = ws_min.z();
-        float xmax = ws_max.x();
-        float ymax = ws_max.y();
-        float zmax = ws_max.z();
-        write(output_file, xmin);
-        write(output_file, ymin);
-        write(output_file, zmin);
-        write(output_file, xmax);
-        write(output_file, ymax);
-        write(output_file, zmax);
+        header<<"ElementType = MET_FLOAT\n";
+        header<<"ElementDataFile = "<<output_filename<<"\n";
 
         for (size_t i = 0; i < values.size(); ++i) {
             write(output_file, values[i]);
         }
+        
         output_file.close();
+        header.close();
     } else {
         std::cerr << "Invalid output format: " << outputformat << std::endl;
         printUsage();
         return -1;
     }
     file.close();
+    
 }
